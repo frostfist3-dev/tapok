@@ -1786,34 +1786,35 @@ def run_health_check():
     server.serve_forever()
     
 async def main():
-	threading.Thread(target=run_health_check, daemon=True).start()
-	
+    threading.Thread(target=run_health_check, daemon=True).start()
+
     default_properties = DefaultBotProperties(parse_mode="Markdown")
     bot = Bot(token=BOT_TOKEN, default=default_properties)
-    
+
     storage = MemoryStorage()
-    
-    dp = Dispatcher(storage=storage) 
-    
+
+    dp = Dispatcher(storage=storage)
+
     dp.include_router(router)
-    
+
     # === РЕГИСТРАЦИЯ MIDDLEWARE ===
-    # Сначала DpMiddleware, чтобы 'dp' был везде
-    dp.update.middleware(DpMiddleware(dp))
-    # Потом BlacklistMiddleware, чтобы он мог игнорировать юзеров
-    dp.update.middleware(BlacklistMiddleware())
+    # Исправляем регистрацию (см. пункт 3 ниже)
+    dp.message.middleware(DpMiddleware(dp))
+    dp.callback_query.middleware(DpMiddleware(dp))
+
+    dp.message.middleware(BlacklistMiddleware())
+    dp.callback_query.middleware(BlacklistMiddleware())
 
     init_db()
     logging.info("Database initialized.")
-    
+
     await bot.set_my_commands([
         BotCommand(command="start", description="Запустить/Перезапустить бота"),
         BotCommand(command="admin", description="[Только для Админов] Админ-панель")
     ])
-    
+
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
