@@ -19,7 +19,7 @@ from aiogram.fsm.storage.memory import MemoryStorage # <-- НОВЕ: Для FSM
 # --- Конфигурация ---
 # !!!
 # СРОЧНО ЗАМЕНИТЕ ВАШ СТАРЫЙ ТОКЕН НА НОВЫЙ ОТ @BotFather !!!
-BOT_TOKEN = "8583363803:AAFtkD-J0vq8uR6kyJPxO00SH1TSn8fIDUo" 
+BOT_TOKEN = "8583363803:AAFrK9fdein2BAnbdJ7jk8nn9z57SZtj8Qg" 
 
 # --- АДМИНИСТРАТОРЫ ---
 ADMIN_IDS = [
