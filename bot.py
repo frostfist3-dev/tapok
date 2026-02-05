@@ -19,7 +19,7 @@ from aiogram.fsm.storage.memory import MemoryStorage # <-- НОВЕ: Для FSM
 # --- Конфигурация ---
 # !!!
 # СРОЧНО ЗАМЕНИТЕ ВАШ СТАРЫЙ ТОКЕН НА НОВЫЙ ОТ @BotFather !!!
-BOT_TOKEN = "8583363803:AAFrK9fdein2BAnbdJ7jk8nn9z57SZtj8Qg" 
+BOT_TOKEN = "8583363803:AAFtkD-J0vq8uR6kyJPxO00SH1TSn8fIDUo" 
 
 # --- АДМИНИСТРАТОРЫ ---
 ADMIN_IDS = [
@@ -1767,8 +1767,27 @@ class BlacklistMiddleware:
         return await handler(event, data)
 
 
-# --- Запуск бота ---
+# --- Запуск бота --
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# Мини-сервер для "обмана" Render
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def run_health_check():
+    # Render сам передает порт в переменную окружения PORT
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    server.serve_forever()
+    
 async def main():
+	threading.Thread(target=run_health_check, daemon=True).start()
+	
     default_properties = DefaultBotProperties(parse_mode="Markdown")
     bot = Bot(token=BOT_TOKEN, default=default_properties)
     
@@ -1795,24 +1814,6 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
-import os
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
-
-# Мини-сервер для Koyeb, чтобы он видел, что бот работает
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-def run_health_check():
-    port = int(os.getenv("PORT", 8000)) # Koyeb сам даст порт
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    server.serve_forever()
-
-# В функции main() перед стартом поллинга добавь запуск этого сервера:
-# threading.Thread(target=run_health_check, daemon=True).start()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
