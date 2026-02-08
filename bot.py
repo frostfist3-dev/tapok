@@ -1087,7 +1087,7 @@ async def callback_select_weight(callback: types.CallbackQuery, state: FSMContex
     await state.set_state(OrderStates.waiting_for_delivery_method)
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="📍 Готовый Клад (Магнит/Тайник)", callback_data="delivery:klad")
+    builder.button(text="📍Клад (Магнит/Прикоп)", callback_data="delivery:klad")
     builder.button(text="📦 Почта (Отправка)", callback_data="delivery:postal")
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад к выбору веса", callback_data=f"product:{product_data['product_name']}"))
     builder.adjust(1)
