@@ -559,14 +559,18 @@ class OrderStates(StatesGroup):
 # --- Клиентские клавиатуры ---
 
 def get_main_menu_keyboard():
-    """Главное меню с Профилем и Поддержкой"""
+    """Главное меню с Профилем, Правилами и Поддержкой"""
     builder = InlineKeyboardBuilder()
     builder.button(text="🛍️ Каталог Товаров", callback_data="show_catalog")
     builder.button(text="👤 Мой Профиль / Рефералы", callback_data="show_profile")
+    
+    # --- НОВАЯ КНОПКА С ССЫЛКОЙ ---
+    # Замените 'https://t.me/...' на вашу реальную ссылку на правила
+    builder.button(text="📜 Правила", url="https://telegra.ph/Pravila-magazinu-02-08") 
+    
     builder.button(text="💬 Написать Админу", callback_data="start_support")
     builder.adjust(1)
     return builder.as_markup()
-
 # --- НОВЫЕ Клавиатуры Каталога (на основе БД) ---
 def get_categories_keyboard(categories: list[str]):
     """Показывает кнопки Категорий из БД"""
