@@ -33,6 +33,14 @@ PAYMENT_CARDS = [
     "5232 4410 2403 2182"   # Новая карта
 ]
 
+# === НОВОЕ: Города для кладов ===
+KLAD_LOCATIONS = {
+    "Рівненська обл": ["Рівне", "Дубно", "Вараш", "Сарни", "Здолбунів"],
+    "Волинська обл": ["Луцьк", "Ковель", "Нововолинськ", "Володимир", "Камінь-Каширський"],
+    "Львівська обл": ["Львів", "Дрогобич", "Червоноград", "Стрий", "Самбір", "Трускавець", "Броди", "Яворів"]
+}
+
+
 # ----------------------------------------------------------------------
 # --- ЛОГИКА: Настройка Базы Данных SQLite ---
 # ----------------------------------------------------------------------
@@ -544,10 +552,14 @@ class UserSupport(StatesGroup):
     in_support = State()           # Юзер в активном чате
 
 class OrderStates(StatesGroup):
-    # ИЗМЕНЕНО: Добавлен шаг Категории
     waiting_for_category = State()
     waiting_for_product = State()
     waiting_for_weight = State()
+    # --- НОВЫЕ СОСТОЯНИЯ ---
+    waiting_for_delivery_method = State() # Выбор: Клад или Почта
+    waiting_for_region = State()          # Выбор области
+    waiting_for_city = State()            # Выбор города
+    # -----------------------
     waiting_for_promo_code = State() 
     waiting_for_payment_check = State()
     waiting_for_contact = State() 
@@ -571,6 +583,8 @@ def get_main_menu_keyboard():
     builder.button(text="💬 Написать Админу", callback_data="start_support")
     builder.adjust(1)
     return builder.as_markup()
+
+
 # --- НОВЫЕ Клавиатуры Каталога (на основе БД) ---
 def get_categories_keyboard(categories: list[str]):
     """Показывает кнопки Категорий из БД"""
@@ -768,8 +782,14 @@ async def send_payment_instructions(message: types.Message, state: FSMContext, b
     await state.set_state(OrderStates.waiting_for_payment_check)
     user_data = await state.get_data()
     
+    # ... старые переменные ...
     product_name = user_data.get('chosen_product', 'N/A')
     weight = user_data.get('chosen_weight', 'N/A')
+    
+    # НОВЫЕ ПЕРЕМЕННЫЕ
+    delivery_type = user_data.get('delivery_type', 'Не указано')
+    delivery_loc = user_data.get('delivery_location', '')
+
     original_price = user_data.get('original_price', 0)
     final_price = user_data.get('final_price', original_price)
     promo_code = user_data.get('promo_code_used')
@@ -778,13 +798,13 @@ async def send_payment_instructions(message: types.Message, state: FSMContext, b
     if promo_code:
         price_text += f"\n(Скидка по коду `{promo_code}`, старая цена: {original_price} грн)"
 
-    # === ИЗМЕНЕНИЕ: Выбираем случайную карту ===
     chosen_card = random.choice(PAYMENT_CARDS)
 
     payment_message = (
         f"🔥 **Ваш заказ:**\n"
         f"Товар: **{product_name}**\n"
-        f"Вес/Кол-во: **{weight}**\n"
+        f"Вес: **{weight}**\n"
+        f"🚚 **Доставка:** {delivery_type} ({delivery_loc})\n" # <-- ДОБАВИЛИ ЭТУ СТРОКУ
         f"{price_text}\n\n"
         "--- **РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ** ---\n"
         f"Карта: `{chosen_card}`\n"
@@ -792,7 +812,6 @@ async def send_payment_instructions(message: types.Message, state: FSMContext, b
         "⚠️ **После оплаты, пожалуйста, отправьте скриншот (чек) об оплате** в ответ на это сообщение.\n"
     )
        
-    # ===> ИЗМЕНЕНИЕ: Добавляем кнопку "Отмена оплаты" (Назад в меню) <===
     await message.answer(payment_message, reply_markup=get_client_back_to_main_menu_keyboard())
 
 # --- Функция: Обработка и сохранение заказа ---
@@ -807,8 +826,12 @@ async def process_new_order(message: types.Message, state: FSMContext, bot: Bot,
     check_file_id = user_data.get('payment_check_file_id')
     if not check_file_id:
         logging.error(f"No payment_check_file_id for user {message.from_user.id}")
-        await message.answer("Произошла ошибка, не найдено фото чека. Начните с /start")
+        await message.answer("❌ Произошла ошибка: не найдено фото чека. Пожалуйста, начните сначала через /start")
         return
+
+    # Извлекаем данные о доставке
+    delivery_type = user_data.get('delivery_type', 'Не указан')
+    delivery_loc = user_data.get('delivery_location', 'Не указано')
 
     original_price = user_data.get('original_price', 0)
     final_price = user_data.get('final_price', original_price)
@@ -828,23 +851,30 @@ async def process_new_order(message: types.Message, state: FSMContext, bot: Bot,
         "check_file_id": check_file_id
     }
     
+    # Сохраняем в базу (в текущей структуре БД полей под доставку может не быть, 
+    # но админ получит все данные в сообщении)
     create_db_order(order_data)
     
     price_text_admin = f"**{final_price} грн**"
     if promo_code:
         price_text_admin += f" (код: `{promo_code}`, было {original_price} грн)"
 
+    # Формируем сообщение для админа с учетом новых данных
     admin_caption = (
         f"🚨 **НОВЫЙ ЗАКАЗ!** (ID: `{short_order_id}`) 🚨\n\n"
-        f"Товар: **{order_data['product']}** ({order_data['weight']})\n"
-        f"Цена: {price_text_admin}\n\n"
-        f"--- **КОНТАКТ КЛИЕНТА** ---\n"
-        f"{contact_info}\n"
-        f"(ID: `{message.from_user.id}` | @{order_data['username']})"
+        f"👤 **Клиент:** @{order_data['username']} (ID: `{message.from_user.id}`)\n"
+        f"📦 **Товар:** {order_data['product']} ({order_data['weight']})\n"
+        f"💰 **К оплате:** {price_text_admin}\n"
+        f"--------------------------\n"
+        f"🚚 **Способ:** {delivery_type}\n"
+        f"📍 **Локация:** {delivery_loc}\n"
+        f"--------------------------\n"
+        f"📝 **Контактные данные:**\n{contact_info}\n"
     )
 
     admin_kb = get_admin_order_keyboard(order_id)
     
+    # Рассылка админам
     for admin_id in ADMIN_IDS:
         try:
             await bot.send_photo(
@@ -856,10 +886,12 @@ async def process_new_order(message: types.Message, state: FSMContext, bot: Bot,
         except Exception as e:
             logging.error(f"Failed to send order {short_order_id} to admin {admin_id}: {e}")
     
+    # Ответ пользователю
     await message.answer(
-        f"🎉 **Заказ #{short_order_id} принят в обработку!**\n\n"
-        "Администратор скоро рассмотрит вашу заявку.\n"
-        "Ожидайте уведомления о подтверждении."
+        f"🎉 **Заказ #{short_order_id} принят!**\n\n"
+        f"Вы выбрали: **{order_data['product']}**\n"
+        f"Доставка: **{delivery_type}** ({delivery_loc})\n\n"
+        "⏳ Администратор проверит оплату и свяжется с вами. Спасибо за выбор!"
     )
     
     await state.clear()
@@ -971,7 +1003,7 @@ async def cb_show_profile(callback: types.CallbackQuery, bot: Bot):
         f"👤 **Ваш Профиль**\n\n"
         f"Ваш ID: `{callback.from_user.id}`\n\n"
         f"--- **🏆 Реферальная Программа** ---\n"
-        f"Пригласите **5 друзей**, которые совершат *первую* покупку, и получите **промокод на 75% скидки!**\n\n"
+        f"Пригласите **5 друзей**, которые совершат *первую* покупку, и получите **промокод на 50% скидки!**\n\n"
         f"📈 **Ваш прогресс:** {ref_count} / 5\n\n"
         f"🔗 **Ваша ссылка для приглашений:**\n"
         f"`{ref_link}`"
@@ -1030,7 +1062,6 @@ async def callback_select_product(callback: types.CallbackQuery, state: FSMConte
 
 @router.callback_query(F.data.startswith("weight:"), StateFilter(OrderStates.waiting_for_weight))
 async def callback_select_weight(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
-    """Получает ID товара, сохраняет данные в FSM, переходит к Промокоду"""
     try:
         product_id = int(callback.data.split(":")[1])
     except (ValueError, IndexError):
@@ -1043,22 +1074,110 @@ async def callback_select_weight(callback: types.CallbackQuery, state: FSMContex
         return
     
     price = product_data['price']
+    
+    # Сохраняем данные о товаре
     await state.update_data(
         chosen_product=product_data['product_name'],
         chosen_weight=product_data['weight'],
         original_price=price,
         final_price=price
     )
-    await state.set_state(OrderStates.waiting_for_promo_code)
     
+    # === ИЗМЕНЕНИЕ: Переходим к выбору доставки ===
+    await state.set_state(OrderStates.waiting_for_delivery_method)
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📍 Готовый Клад (Магнит/Тайник)", callback_data="delivery:klad")
+    builder.button(text="📦 Почта (Отправка)", callback_data="delivery:postal")
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад к выбору веса", callback_data=f"product:{product_data['product_name']}"))
+    builder.adjust(1)
+
     await callback.message.edit_text(
-        f"{callback.message.text}\n\n"
-        f"Вы выбрали: **{product_data['weight']}** за **{price} грн**.\n\n"
-        "🎟️ Если у вас есть промокод, введите его.\n"
-        "Если нет - нажмите **Пропустить**.",
-        reply_markup=get_promo_keyboard()
+        f"✅ Вы выбрали: **{product_data['product_name']}** ({product_data['weight']}) - **{price} грн**\n\n"
+        f"🚚 **Выберите способ получения:**",
+        reply_markup=builder.as_markup()
     )
     await callback.answer()
+    
+    # --- ХЕНДЛЕРЫ ВЫБОРА ДОСТАВКИ ---
+
+@router.callback_query(F.data == "delivery:postal", StateFilter(OrderStates.waiting_for_delivery_method))
+async def cb_delivery_postal(callback: types.CallbackQuery, state: FSMContext):
+    """Клиент выбрал Почту"""
+    await state.update_data(delivery_type="Почта", delivery_location="Отделение почты")
+    # Переходим к промокоду
+    await state.set_state(OrderStates.waiting_for_promo_code)
+    await ask_promo_code(callback.message, state) # Вызываем функцию запроса промокода
+    await callback.answer()
+
+@router.callback_query(F.data == "delivery:klad", StateFilter(OrderStates.waiting_for_delivery_method))
+async def cb_delivery_klad(callback: types.CallbackQuery, state: FSMContext):
+    """Клиент выбрал Клад -> Показываем Области"""
+    await state.update_data(delivery_type="Клад")
+    await state.set_state(OrderStates.waiting_for_region)
+    
+    builder = InlineKeyboardBuilder()
+    for region in KLAD_LOCATIONS.keys():
+        builder.button(text=region, callback_data=f"region:{region}")
+    
+    # Кнопка назад к выбору доставки (нужно достать ID товара для корректного возврата, но упростим возврат в начало)
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="show_catalog")) 
+    builder.adjust(1)
+    
+    await callback.message.edit_text(
+        "🗺️ **Выберите область:**",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("region:"), StateFilter(OrderStates.waiting_for_region))
+async def cb_select_region(callback: types.CallbackQuery, state: FSMContext):
+    """Клиент выбрал Область -> Показываем Города"""
+    region = callback.data.split(":")[1]
+    cities = KLAD_LOCATIONS.get(region, [])
+    
+    await state.update_data(chosen_region=region)
+    await state.set_state(OrderStates.waiting_for_city)
+    
+    builder = InlineKeyboardBuilder()
+    for city in cities:
+        builder.button(text=city, callback_data=f"city:{city}")
+    
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад к областям", callback_data="delivery:klad"))
+    builder.adjust(2) # Города в 2 колонки для красоты
+    
+    await callback.message.edit_text(
+        f"📍 Область: **{region}**\n👇 Выберите город:",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("city:"), StateFilter(OrderStates.waiting_for_city))
+async def cb_select_city(callback: types.CallbackQuery, state: FSMContext):
+    """Клиент выбрал Город -> Идем к промокоду"""
+    city = callback.data.split(":")[1]
+    data = await state.get_data()
+    region = data.get('chosen_region', '')
+    
+    full_location = f"{region}, г. {city}"
+    await state.update_data(delivery_location=full_location)
+    
+    # Переходим к промокоду
+    await state.set_state(OrderStates.waiting_for_promo_code)
+    await ask_promo_code(callback.message, state)
+    await callback.answer()
+
+# Вспомогательная функция, чтобы не дублировать код запроса промокода
+async def ask_promo_code(message: types.Message, state: FSMContext):
+    """Показывает меню ввода промокода"""
+    # Если это CallbackQuery (нажатие кнопки), message будет доступен через callback.message
+    # Но так как мы передаем message, нам нужно редактировать именно его
+    
+    await message.edit_text(
+        "🎟️ **Есть промокод?**\n\n"
+        "Отправьте код сообщением или нажмите **Пропустить**.",
+        reply_markup=get_promo_keyboard()
+    )
 
 @router.callback_query(F.data == "promo:skip", StateFilter(OrderStates.waiting_for_promo_code))
 async def callback_skip_promo(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
@@ -1093,7 +1212,7 @@ async def process_promo_code(message: types.Message, state: FSMContext, bot: Bot
         await send_payment_instructions(message, state, bot)
     else:
         await message.answer(
-            "❌ **Промокод не найден.**\n"
+            "❌ **Промокод не найден или строк действия истёк.**\n"
             "Попробуйте еще раз или нажмите 'Пропустить' (в сообщении выше)."
         )
 
