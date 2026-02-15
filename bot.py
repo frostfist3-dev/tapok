@@ -36,11 +36,60 @@ PAYMENT_CARDS = [
 ]
 
 # === НОВОЕ: Города для кладов ===
+# === ОБНОВЛЕНО: Города и Районы для кладов ===
+# Структура: { "Область": { "Город": ["Район1", "Район2"] } }
 KLAD_LOCATIONS = {
-    "Рівненська обл": ["Рівне", "Дубно", "Вараш", "Сарни", "Здолбунів"],
-    "Волинська обл": ["Луцьк", "Ковель", "Нововолинськ", "Володимир", "Камінь-Каширський"],
-    "Львівська обл": ["Львів", "Дрогобич", "Червоноград", "Сокаль", "Стрий", "Самбір", "Трускавець", "Броди", "Яворів"]
+    "Київська обл": {
+        "Київ": ["Дарницький", "Шевченківський", "Подільський", "Оболонський", "Деснянський", "Печерський"],
+        "Біла Церква": ["Центр", "Заріччя", "Вокзальний"],
+        "Бровари": ["Центр", "Старе місто", "Розвилка", "Лісовий"],
+        "Бориспіль": ["Центр", "Нестерівка", "Промзона"],
+        "Ірпінь": ["Центр", "Набережна"]
+    },
+    "Житомирська обл": {
+        "Житомир": ["Корольовський р-н", "Окраїна"],
+        "Бердичів": ["Центр", "Окраїна"]
+    },
+    "Хмельницька обл": {
+        "Хмельницький": ["Центр", "Заріччя", "Окраїна"],
+        "Кам’янець-Подільський": ["Центр", "Окраїна"],
+        "Шепетівка": ["Окраїна"],
+        "Нетішин": ["Центр", "Окраїна"]
+    },
+    "Тернопільська обл": {
+        "Тернопіль": ["Центр", "Окраїна"]
+    },
+    "Дніпропетровська обл": {
+        "Дніпро": ["Шевченківський", "Центральний", "Окраїна"],
+        "Кривий Ріг": ["Покровський", "Окраїна"],
+        "Павлоград": ["Окраїна"]
+    },
+    "Кіровоградська обл": {
+        "Кропивницький": ["Подільський", "Окраїна"]
+    },
+    "Миколаївська обл": {
+        "Миколаїв": ["Центральний", "Заводський", "Корабельний", "Окраїна"]
+    },
+    # --- Старые области (добавил стандартные районы) ---
+    "Рівненська обл": {
+        "Рівне": ["Центр", "Автовокзал", "Північний"],
+        "Дубно": ["Центр", "Окраїна"],
+        "Вараш": ["Центр", "Окраїна"],
+        "Сарни": ["Центр", "Окраїна"]
+    },
+    "Волинська обл": {
+        "Луцьк": ["Центр", "33-й район", "Вокзал"],
+        "Ковель": ["Центр", "Окраїна"],
+        "Нововолинськ": ["Центр", "Окраїна"]
+    },
+    "Львівська обл": {
+        "Львів": ["Галицький", "Личаківський", "Сихівський", "Залізничний"],
+        "Дрогобич": ["Центр", "Окраїна"],
+        "Червоноград": ["Центр", "Окраїна"],
+        "Стрий": ["Центр", "Окраїна"]
+    }
 }
+
 
 
 # ----------------------------------------------------------------------
@@ -557,14 +606,14 @@ class OrderStates(StatesGroup):
     waiting_for_category = State()
     waiting_for_product = State()
     waiting_for_weight = State()
-    # --- НОВЫЕ СОСТОЯНИЯ ---
-    waiting_for_delivery_method = State() # Выбор: Клад или Почта
+    waiting_for_delivery_method = State() 
     waiting_for_region = State()          # Выбор области
     waiting_for_city = State()            # Выбор города
-    # -----------------------
+    waiting_for_district = State()        # <--- НОВОЕ: Выбор района
     waiting_for_promo_code = State() 
     waiting_for_payment_check = State()
     waiting_for_contact = State() 
+
 
 # ----------------------------------------------------------------------
 # --- КЛАВИАТУРЫ ---
@@ -1109,7 +1158,7 @@ async def cb_delivery_postal(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(delivery_type="Почта", delivery_location="Отделение почты")
     # Переходим к промокоду
     await state.set_state(OrderStates.waiting_for_promo_code)
-    await ask_promo_code(callback.message, state) # Вызываем функцию запроса промокода
+    await ask_promo_code(callback.message, state) 
     await callback.answer()
 
 @router.callback_query(F.data == "delivery:klad", StateFilter(OrderStates.waiting_for_delivery_method))
@@ -1119,10 +1168,10 @@ async def cb_delivery_klad(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(OrderStates.waiting_for_region)
     
     builder = InlineKeyboardBuilder()
+    # Берем ключи (названия областей) из словаря
     for region in KLAD_LOCATIONS.keys():
         builder.button(text=region, callback_data=f"region:{region}")
     
-    # Кнопка назад к выбору доставки (нужно достать ID товара для корректного возврата, но упростим возврат в начало)
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="show_catalog")) 
     builder.adjust(1)
     
@@ -1136,17 +1185,20 @@ async def cb_delivery_klad(callback: types.CallbackQuery, state: FSMContext):
 async def cb_select_region(callback: types.CallbackQuery, state: FSMContext):
     """Клиент выбрал Область -> Показываем Города"""
     region = callback.data.split(":")[1]
-    cities = KLAD_LOCATIONS.get(region, [])
+    
+    # Получаем словарь городов этой области
+    cities_dict = KLAD_LOCATIONS.get(region, {})
+    cities_list = list(cities_dict.keys()) # Превращаем ключи (города) в список
     
     await state.update_data(chosen_region=region)
     await state.set_state(OrderStates.waiting_for_city)
     
     builder = InlineKeyboardBuilder()
-    for city in cities:
+    for city in cities_list:
         builder.button(text=city, callback_data=f"city:{city}")
     
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад к областям", callback_data="delivery:klad"))
-    builder.adjust(2) # Города в 2 колонки для красоты
+    builder.adjust(2) 
     
     await callback.message.edit_text(
         f"📍 Область: **{region}**\n👇 Выберите город:",
@@ -1156,12 +1208,46 @@ async def cb_select_region(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("city:"), StateFilter(OrderStates.waiting_for_city))
 async def cb_select_city(callback: types.CallbackQuery, state: FSMContext):
-    """Клиент выбрал Город -> Идем к промокоду"""
+    """Клиент выбрал Город -> Показываем Районы (НОВАЯ ЛОГИКА)"""
     city = callback.data.split(":")[1]
+    
     data = await state.get_data()
     region = data.get('chosen_region', '')
     
-    full_location = f"{region}, г. {city}"
+    # Получаем список районов для выбранного города
+    # KLAD_LOCATIONS[Область][Город] -> список районов
+    districts = KLAD_LOCATIONS.get(region, {}).get(city, [])
+    
+    await state.update_data(chosen_city=city)
+    await state.set_state(OrderStates.waiting_for_district)
+    
+    builder = InlineKeyboardBuilder()
+    for dist in districts:
+        # callback_data ограничен 64 байтами, поэтому обрезаем длинные названия если нужно
+        safe_dist = dist[:20] 
+        builder.button(text=dist, callback_data=f"dist:{safe_dist}")
+        
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад к городам", callback_data=f"region:{region}"))
+    builder.adjust(2)
+    
+    await callback.message.edit_text(
+        f"📍 Город: **{city}**\n👇 Выберите район/ориентир:",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+# === НОВЫЙ ХЕНДЛЕР ДЛЯ РАЙОНОВ ===
+@router.callback_query(F.data.startswith("dist:"), StateFilter(OrderStates.waiting_for_district))
+async def cb_select_district(callback: types.CallbackQuery, state: FSMContext):
+    """Клиент выбрал Район -> Идем к оплате"""
+    district = callback.data.split(":")[1]
+    
+    data = await state.get_data()
+    region = data.get('chosen_region', '')
+    city = data.get('chosen_city', '')
+    
+    # Формируем полный адрес
+    full_location = f"{region}, г.{city}, р-н {district}"
     await state.update_data(delivery_location=full_location)
     
     # Переходим к промокоду
