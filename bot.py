@@ -20,6 +20,7 @@ from aiogram.fsm.storage.memory import MemoryStorage # <-- НОВЕ: Для FSM
 # !!!
 # СРОЧНО ЗАМЕНИТЕ ВАШ СТАРЫЙ ТОКЕН НА НОВЫЙ ОТ @BotFather !!!
 BOT_TOKEN = "8379189056:AAGiKI8sdhDSohWBtN24fRZa-AjHaCmftKw" 
+REVIEWS_LINK = "https://t.me/+s-AyottAPJJlMWUy"
 
 # --- АДМИНИСТРАТОРЫ ---
 ADMIN_IDS = [
@@ -622,18 +623,22 @@ class OrderStates(StatesGroup):
 # --- Клиентские клавиатуры ---
 
 def get_main_menu_keyboard():
-    """Главное меню с Профилем, Правилами и Поддержкой"""
+    """Главное меню с Профилем, Поддержкой и Отзывами"""
     builder = InlineKeyboardBuilder()
+    
+    # Основные кнопки
     builder.button(text="🛍️ Каталог Товаров", callback_data="show_catalog")
     builder.button(text="👤 Мой Профиль / Рефералы", callback_data="show_profile")
     
-    # --- НОВАЯ КНОПКА С ССЫЛКОЙ ---
-    # Замените 'https://t.me/...' на вашу реальную ссылку на правила
-    builder.button(text="📜 Правила", url="https://telegra.ph/Pravila-magazinu-02-08") 
+    # !!! НОВАЯ КНОПКА ОТЗЫВЫ !!!
+    # Обратите внимание: мы используем url=REVIEWS_LINK, а не callback_data
+    builder.button(text="⭐️ Отзывы", url=REVIEWS_LINK) 
     
     builder.button(text="💬 Написать Админу", callback_data="start_support")
-    builder.adjust(1)
+    
+    builder.adjust(1) # Кнопки будут друг под другом (в 1 столбик)
     return builder.as_markup()
+
 
 
 # --- НОВЫЕ Клавиатуры Каталога (на основе БД) ---
