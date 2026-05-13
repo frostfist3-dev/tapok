@@ -20,7 +20,7 @@ from aiogram.fsm.storage.memory import MemoryStorage # <-- НОВЕ: Для FSM
 # !!!
 # СРОЧНО ЗАМЕНИТЕ ВАШ СТАРЫЙ ТОКЕН НА НОВЫЙ ОТ @BotFather !!!
 BOT_TOKEN = "8379189056:AAGiKI8sdhDSohWBtN24fRZa-AjHaCmftKw" 
-REVIEWS_LINK = "https://t.me/+s-AyottAPJJlMWUy"
+REVIEWS_LINK = "https://t.me/+agSeiSTjmv5jOTYy"
 
 # --- АДМИНИСТРАТОРЫ ---
 ADMIN_IDS = [
