@@ -19,13 +19,13 @@ from aiogram.fsm.storage.memory import MemoryStorage # <-- НОВЕ: Для FSM
 # --- Конфигурация ---
 # !!!
 # СРОЧНО ЗАМЕНИТЕ ВАШ СТАРЫЙ ТОКЕН НА НОВЫЙ ОТ @BotFather !!!
-BOT_TOKEN = "8379189056:AAGiKI8sdhDSohWBtN24fRZa-AjHaCmftKw" 
+BOT_TOKEN = "8762476723:AAHbQmDj5chIlS-llMx5SDjI9Ds0XrPJPgs" 
 REVIEWS_LINK = "https://t.me/+agSeiSTjmv5jOTYy"
 
 # --- АДМИНИСТРАТОРЫ ---
 ADMIN_IDS = [
     1945747968,   # Ваш ID (Основной админ)
-    8284390315    # <<< ID ВТОРОГО АДМИНА.
+    8479717148    # <<< ID ВТОРОГО АДМИНА.
 ]
 
 # === НОВОЕ: Список карт для оплаты ===
